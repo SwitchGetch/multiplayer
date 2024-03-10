@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
@@ -44,6 +44,10 @@ class Server
                     var send_message_stream = Clients[i].GetStream();
 
                     await send_message_stream.WriteAsync(bytes.ToArray());
+                }
+                else
+                {
+                    Clients.RemoveAt(i);
                 }
             }
 
