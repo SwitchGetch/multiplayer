@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Linq;
@@ -11,16 +11,33 @@ using System.Threading.Tasks;
 
 class Block
 {
-    public char Symbol { get; set; }
+    public virtual char Symbol { get; set; }
     public ConsoleColor Color { get; set; }
     public int X { get; set; }
     public int Y { get; set; }
+
+    public BlockType Type { get; set; }
+
+
+    public enum BlockType
+    {
+        None,
+        Wall,
+        Player
+    }
 }
 
 
-class User: Block
+class User : Block
 {
-    public int ID;
+    public string ID;
+
+
+    public override char Symbol 
+    { 
+        get => base.Symbol; 
+        set => base.Symbol = (value == ' ' ? '@' : value); 
+    }
 }
 
 static class Map
@@ -35,12 +52,31 @@ static class Map
             {
                 if (i == 0 || i == h - 1 || j == 0 || j == l - 1)
                 {
-                    map.Add(new Block() { X = j, Y = i, Symbol = '#', Color = ConsoleColor.Red });
+                    map.Add
+                        (
+                        new Block() 
+                        {
+                            X = j,
+                            Y = i, Symbol = '#',
+                            Color = ConsoleColor.Red,
+                            Type = Block.BlockType.Wall
+                        }
+                        );
                 }
                 else
                 {
-                    map.Add(new Block() { X = j, Y = i, Symbol = ' ', Color = ConsoleColor.Black });
-                }          
+                    map.Add
+                        (
+                        new Block()
+                        { 
+                            X = j,
+                            Y = i,
+                            Symbol = ' ',
+                            Color = ConsoleColor.Black,
+                            Type = Block.BlockType.None
+                        }
+                        );
+                }
             }
         }
     }
@@ -70,12 +106,14 @@ class Client
         Console.Write(" ");
     }
 
+
     public static void SetCurrentPosition(User current)
     {
         Console.SetCursorPosition(current.X, current.Y);
         Console.ForegroundColor = current.Color;
         Console.Write(current.Symbol);
     }
+
 
     public static async Task GetMessage(TcpClient client)
     {
@@ -121,70 +159,112 @@ class Client
     }
 
 
-    public static async Task SendMessage(TcpClient tcp_client, User user)
+    public static async Task Receive(TcpClient tcp_client, User user)
     {
         var stream = tcp_client.GetStream();
 
+        string str = Newtonsoft.Json.JsonConvert.SerializeObject(user);
+        str += '\0';
+
+        byte[] bytes = Encoding.UTF8.GetBytes(str);
+
+        await stream.WriteAsync(bytes);
+    }
+
+
+    public static async Task SendMessage(TcpClient tcp_client, User user)
+    {
         while (true)
         {
             ConsoleKeyInfo key = Console.ReadKey(true);
 
-            switch(key.Key)
+            switch (key.Key)
             {
                 case ConsoleKey.W:
 
-                    user.Y--;
+                    if (user.Y > 0) user.Y--;
+                    //if (Map.map.Find(x => x.X == user.X && x.Y == user.Y).Type != Block.BlockType.None)
+                    //{
+                    //    user.Y++;
+                    //}
+
 
                     break;
 
                 case ConsoleKey.A:
 
-                    user.X--;
+                    if (user.X > 0) user.X--;
+                    //if (Map.map.Find(x => x.X == user.X && x.Y == user.Y).Type != Block.BlockType.None)
+                    //{
+                    //    user.X++;
+                    //}
 
                     break;
 
                 case ConsoleKey.S:
 
                     user.Y++;
+                    //if (Map.map.Find(x => x.X == user.X && x.Y == user.Y).Type != Block.BlockType.None)
+                    //{
+                    //    user.Y--;
+                    //}
 
                     break;
 
                 case ConsoleKey.D:
 
                     user.X++;
+                    //if (Map.map.Find(x => x.X == user.X && x.Y == user.Y).Type != Block.BlockType.None)
+                    //{
+                    //    user.X--;
+                    //}
 
                     break;
             }
 
 
-            string str = Newtonsoft.Json.JsonConvert.SerializeObject(user);
-            str += '\0';
-
-            byte[] bytes = Encoding.UTF8.GetBytes(str);
-
-            await stream.WriteAsync(bytes);
+            await Receive(tcp_client, user);
         }
     }
 
 
     public static async Task Main(string[] args)
-    { 
+    {
+        await Console.Out.WriteAsync("you are: ");
+        string symbol = Console.ReadLine();
+
+        await Console.Out.WriteAsync("your color is: ");
+        int num = Convert.ToInt32(Console.ReadLine());
+
+        ConsoleColor color = (num > 0 && num < 16 ? (ConsoleColor)num : ConsoleColor.Green);
+
+
+
         Map.Fill(20, 20);
         Map.Output();
 
-        int id = Convert.ToInt32(Console.ReadLine());
-        User user = new User() { X = 10, Y = 10, Color = ConsoleColor.Green, Symbol = '@', ID = id };
+        User user = new User()
+        {
+            X = 10,
+            Y = 10,
+            Color = color,
+            Symbol = symbol[0],
+            ID = Guid.NewGuid().ToString(),
+            Type = Block.BlockType.Player
+        };
+
         Users.Add(user);
 
 
         TcpClient tcp_client = new TcpClient();
-        await tcp_client.ConnectAsync(IPAddress.Parse("127.0.0.1"), 12345);
-        await Console.Out.WriteAsync("Connected\n");
 
+        await tcp_client.ConnectAsync(IPAddress.Parse("26.86.16.106"), 9010);
+        await Receive(tcp_client, user);
+        await Console.Out.WriteAsync("\nConnected\n");
 
 
         _ = Task.Run(async () => await GetMessage(tcp_client));
 
-        await Task.Run(async () => await SendMessage(tcp_client, Users.First(x => x.ID == id)));
+        await Task.Run(async () => await SendMessage(tcp_client, Users.First(x => x.ID == user.ID)));
     }
 }
